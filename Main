@@ -1,0 +1,87 @@
+import React, { useState } from "react";
+import { Helmet } from "react-helmet";
+import { Document, pdfjs } from "react-pdf";
+import * as pdfjsLib from "pdfjs-dist/build/pdf";
+import JSZip from "jszip";
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.js`;
+
+function App() {
+  const [pdfFile, setPdfFile] = useState(null);
+  const [docContent, setDocContent] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleFileChange = (e) => {
+    setError("");
+    const file = e.target.files[0];
+    if (file && file.type === "application/pdf") {
+      setPdfFile(file);
+    } else {
+      setError("Please upload a valid PDF file.");
+    }
+  };
+
+  const extractTextFromPDF = async () => {
+    if (!pdfFile) return;
+    setLoading(true);
+    setError("");
+    setDocContent("");
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const typedarray = new Uint8Array(reader.result);
+        const pdf = await pdfjsLib.getDocument(typedarray).promise;
+        let textContent = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items.map((item) => item.str).join(" ");
+          textContent += pageText + "\n\n";
+        }
+        setDocContent(textContent);
+        downloadAsWord(textContent);
+      };
+      reader.readAsArrayBuffer(pdfFile);
+    } catch (err) {
+      setError("Failed to process PDF. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadAsWord = async (text) => {
+    const blob = new Blob([text], { type: "application/msword" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "converted.doc";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
+      <Helmet>
+        <title>PDF to Word Converter</title>
+        <meta name="description" content="Convert your PDF files to Word documents instantly and securely in your browser." />
+        <meta name="keywords" content="PDF to Word, PDF converter, online converter" />
+      </Helmet>
+
+      <div className="bg-white p-6 rounded-2xl shadow-xl max-w-md w-full">
+        <h1 className="text-2xl font-bold mb-4 text-center">PDF to Word Converter</h1>
+        <input type="file" accept="application/pdf" onChange={handleFileChange} className="mb-4 w-full" />
+        <button
+          onClick={extractTextFromPDF}
+          disabled={!pdfFile || loading}
+          className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition"
+        >
+          {loading ? "Converting..." : "Convert to Word"}
+        </button>
+        {error && <p className="text-red-600 mt-2">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+export default App;
